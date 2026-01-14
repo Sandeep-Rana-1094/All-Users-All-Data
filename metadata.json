@@ -1,0 +1,5 @@
+{
+  "name": "Tasks Data Of All Employees",
+  "description": "A dynamic, high-performance dashboard for tracking tasks, KPIs, and operational delivery from Google Sheets.",
+  "requestFramePermissions": []
+}
