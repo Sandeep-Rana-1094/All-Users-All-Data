@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,28 +8,187 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(226, 232, 240, 0.8);
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #cbd5e1;
-        }
+/* Consolidated CSS from index.css and original inline styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --dashboard-bg: #fdfdff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --primary-accent: #6366f1;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--dashboard-bg);
+  /* Premium Mesh Gradient Background */
+  background-image: 
+    radial-gradient(at 10% 20%, hsla(242, 100%, 95%, 1) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, hsla(262, 100%, 93%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, hsla(222, 100%, 96%, 1) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, hsla(280, 100%, 95%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(210, 100%, 94%, 1) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, hsla(240, 100%, 96%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 0%, hsla(230, 100%, 92%, 1) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: #0f172a;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.02),
+    0 10px 15px -3px rgba(0, 0, 0, 0.03),
+    inset 0 0 20px rgba(255, 255, 255, 0.5);
+}
+
+.glass-card-hover {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-6px) scale(1.01);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* Animations */
+@keyframes fadeInSlide {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fadeInSlide 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+
+/* Custom animation for blinking filter cards */
+@keyframes attentionPulse {
+  0%, 100% {
+    /* Pulsing glow layer (initial/fade-out state) */
+    box-shadow: 
+      0 0 8px 1px rgba(99, 102, 241, 0.3), /* Subtle initial glow */
+      /* Existing Tailwind ring shadow properties */
+      var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color), 
+      /* Existing glass-panel shadows */
+      0 4px 6px -1px rgba(0, 0, 0, 0.02),
+      0 10px 15px -3px rgba(0, 0, 0, 0.03),
+      inset 0 0 20px rgba(255, 255, 255, 0.5); 
+    filter: brightness(1);
+    transform: scale(1.02); /* Matches active state base scale */
+  }
+  50% {
+    /* Pulsing glow layer (peak state) */
+    box-shadow: 
+      0 0 25px 10px rgba(99, 102, 241, 0.6), /* Stronger, wider glow */
+      /* Existing Tailwind ring shadow properties */
+      var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color), 
+      /* Existing glass-panel shadows */
+      0 4px 6px -1px rgba(0, 0, 0, 0.02),
+      0 10px 15px -3px rgba(0, 0, 0, 0.03),
+      inset 0 0 20px rgba(255, 255, 255, 0.8); /* Brighter inset */
+    filter: brightness(1.15); /* More noticeable brightness change */
+    transform: scale(1.03); /* Slightly larger scale for the peak */
+  }
+}
+
+.animate-attention-pulse {
+  animation: attentionPulse 2s ease-in-out infinite;
+}
+
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* Status Badges */
+.status-pill {
+  @apply px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 w-fit shadow-sm;
+}
+
+.status-completed {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #d1fae5;
+}
+
+.status-delayed {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fef3c7;
+}
+
+.status-pending {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+/* Tables */
+.modern-table thead tr th {
+  @apply text-slate-400 font-bold uppercase tracking-[0.1em] text-[10px] py-5 px-8;
+}
+
+.modern-table tbody tr {
+  @apply transition-colors duration-200 border-b border-slate-100/40;
+}
+
+.modern-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.5); /* Subtle glass background on hover */
+}
+
+/* New: Highlight for Delayed rows */
+.modern-table tbody tr.table-row-delayed {
+  background-color: #fffbeb; /* Light amber background */
+  border-left: 4px solid #fcd34d; /* Amber border on the left */
+}
+
+.modern-table tbody tr.table-row-delayed:hover {
+  background-color: #fef9c3; /* Slightly lighter amber on hover */
+}
+
+/* Action Buttons specifically as per user image */
+.btn-export {
+  @apply flex flex-col items-center justify-center bg-white border border-slate-200 rounded-2xl px-3 py-1.5 hover:bg-slate-50 transition-all shadow-sm;
+}
+
+.btn-refresh {
+  @apply flex items-center justify-center bg-[#f3f4ff] rounded-2xl p-3 text-[#6366f1] hover:bg-[#ebeeff] transition-all shadow-sm active:scale-95;
+}
     </style>
 <script type="importmap">
 {
@@ -46,5 +206,6 @@
 <body class="text-slate-900 overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="index.tsx"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </body>
 </html>
