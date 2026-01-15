@@ -1,5 +1,4 @@
 
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -159,7 +158,17 @@ body {
 }
 
 .modern-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.5); /* Subtle glass background on hover */
+}
+
+/* New: Highlight for Delayed rows */
+.modern-table tbody tr.table-row-delayed {
+  background-color: #fffbeb; /* Light amber background */
+  border-left: 4px solid #fcd34d; /* Amber border on the left */
+}
+
+.modern-table tbody tr.table-row-delayed:hover {
+  background-color: #fef9c3; /* Slightly lighter amber on hover */
 }
 
 /* Action Buttons specifically as per user image */
