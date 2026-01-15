@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   LayoutDashboard, 
@@ -21,7 +21,10 @@ import {
   User,
   Cpu,
   ArrowUpRight,
-  ChevronDown // Import ChevronDown icon
+  ChevronDown,
+  ChevronUp, // Added ChevronUp for sorting
+  X,
+  LayoutGrid
 } from 'lucide-react';
 
 // --- Types & Constants ---
@@ -35,6 +38,7 @@ interface Task {
   name: string;
   status: 'Completed' | 'Delayed' | 'Pending';
   delayInHours: number;
+  // progress: number; // Removed progress field
 }
 
 const GOOGLE_SHEET_ID = '1XqXgsTYWv6OAL2TmeRzAPZX9jajyJOGjNmgmxqNhIkA';
@@ -115,6 +119,37 @@ const formatDate = (date: Date | null): string => {
   return `${day} ${month} ${year}, ${time}`;
 };
 
+interface ParsedSearchQuery {
+  exactPhrases: string[];
+  keywords: string[];
+}
+
+const parseSearchQuery = (query: string): ParsedSearchQuery => {
+  const exactPhrases: string[] = [];
+  let keywords: string[]; 
+
+  let remainingQuery = query;
+
+  // Extract quoted phrases
+  const quotedRegex = /"([^"]*)"/g;
+  let match;
+  // Use a temporary string to store matches and replace them to avoid re-matching
+  let tempRemainingQuery = remainingQuery;
+  while ((match = quotedRegex.exec(tempRemainingQuery)) !== null) {
+    const phrase = match[1].trim();
+    if (phrase) {
+      exactPhrases.push(phrase.toLowerCase());
+    }
+  }
+  // Remove quoted parts from the original query to process remaining keywords
+  remainingQuery = remainingQuery.replace(quotedRegex, '').trim();
+
+  // Split remaining query by commas and handle individual keywords
+  keywords = remainingQuery.split(',').map(part => part.trim().toLowerCase()).filter(Boolean);
+
+  return { exactPhrases, keywords };
+};
+
 // --- Sub-Components ---
 
 const StatusBadge = ({ status }: { status: Task['status'] }) => {
@@ -174,6 +209,166 @@ const KPICard = ({ title, value, icon: Icon, color, subValue, trend, delay, onCl
   );
 };
 
+const TaskDetailModal = ({ task, onClose }: { task: Task; onClose: () => void }) => {
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-detail-title"
+    >
+      <div className="glass-panel relative w-full max-w-2xl rounded-[2.5rem] p-8 md:p-12 border">
+        <button 
+          onClick={onClose} 
+          className="absolute top-6 right-6 p-2 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm"
+          aria-label="Close task details"
+        >
+          <X size={20} />
+        </button>
+
+        <h3 id="task-detail-title" className="text-3xl font-black text-slate-900 mb-6 tracking-tight">Task Details</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Task ID</p>
+            <p className="font-bold text-slate-800 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 inline-block text-xs font-mono">{task.id}</p>
+          </div>
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Status</p>
+            <StatusBadge status={task.status} />
+          </div>
+          
+          <div className="detail-item md:col-span-2">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Task Description</p>
+            <p className="font-semibold text-slate-700 leading-relaxed">{task.task}</p>
+          </div>
+
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Doer</p>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-white border border-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-[10px]" aria-hidden="true">
+                {task.name.substring(0, 2).toUpperCase()}
+              </div>
+              <span className="text-sm font-semibold text-slate-700">{task.name}</span>
+            </div>
+          </div>
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">System Type</p>
+            <p className="font-semibold text-slate-700">{task.systemType}</p>
+          </div>
+
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Planned Date</p>
+            <p className="font-semibold text-slate-700">{formatDate(task.planned)}</p>
+          </div>
+          <div className="detail-item">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Actual Date</p>
+            <p className="font-semibold text-slate-700">{formatDate(task.actual)}</p>
+          </div>
+          
+          {task.delayInHours > 0 && (
+            <div className="detail-item md:col-span-2">
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-1">Delay</p>
+              <p className="font-semibold text-amber-600">{task.delayInHours.toFixed(1)} hours</p>
+            </div>
+          )}
+
+          {/* Progress bar removed */}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- Column Definitions ---
+interface ColumnDefinition {
+  id: keyof Task | 'taskWithDot'; // 'taskWithDot' is a custom ID for rendering
+  displayName: string;
+  minWidth?: string;
+  defaultVisible: boolean;
+  render: (task: Task) => React.ReactNode;
+}
+
+const allColumnDefinitions: ColumnDefinition[] = [
+  {
+    id: 'id',
+    displayName: 'Task ID',
+    minWidth: '100px',
+    defaultVisible: true,
+    render: (task) => (
+      <span className="text-[10px] font-black text-slate-400 font-mono tracking-wider bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+        {task.id}
+      </span>
+    ),
+  },
+  {
+    id: 'taskWithDot', // Custom ID for combined task + dot display
+    displayName: 'Task',
+    minWidth: '250px',
+    defaultVisible: true,
+    render: (task) => (
+      <div className="flex items-center gap-2">
+        <span 
+          className={`w-2 h-2 rounded-full ${task.actual !== null ? 'bg-emerald-500' : 'bg-slate-300'}`}
+          title={task.actual !== null ? "Task Completed" : "Task Not Yet Completed"}
+          aria-hidden="true"
+        ></span>
+        <p className="text-sm font-bold text-slate-800 line-clamp-1">{task.task}</p>
+      </div>
+    ),
+  },
+  {
+    id: 'systemType',
+    displayName: 'System Type',
+    minWidth: '120px',
+    defaultVisible: true,
+    render: (task) => (
+      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{task.systemType}</p>
+    ),
+  },
+  {
+    id: 'name',
+    displayName: 'Doer',
+    minWidth: '150px',
+    defaultVisible: true,
+    render: (task) => (
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-white border border-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-[10px]" aria-hidden="true">
+          {task.name.substring(0, 2).toUpperCase()}
+        </div>
+        <span className="text-sm font-semibold text-slate-700">{task.name}</span>
+      </div>
+    ),
+  },
+  {
+    id: 'planned',
+    displayName: 'Planned Date',
+    minWidth: '150px',
+    defaultVisible: true,
+    render: (task) => (
+      <span className="text-[12px] font-bold text-slate-500 tabular-nums">{formatDate(task.planned)}</span>
+    ),
+  },
+  {
+    id: 'actual',
+    displayName: 'Actual Date',
+    minWidth: '150px',
+    defaultVisible: true,
+    render: (task) => (
+      <span className="text-[12px] font-bold text-slate-500 tabular-nums">{formatDate(task.actual)}</span>
+    ),
+  },
+  {
+    id: 'status',
+    displayName: 'Status',
+    minWidth: '120px',
+    defaultVisible: true,
+    render: (task) => <StatusBadge status={task.status} />,
+  },
+];
+
+
 // --- App Component ---
 
 const App = () => {
@@ -188,9 +383,63 @@ const App = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [showDelayedOnly, setShowDelayedOnly] = useState(false);
   const [showNotDoneOnly, setShowNotDoneOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(''); // New state for search query
 
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(100);
+
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null); // State for selected task for modal
+
+  // Column visibility state and persistence
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+    try {
+      const storedVisibility = localStorage.getItem('tableColumnVisibility');
+      if (storedVisibility) {
+        return JSON.parse(storedVisibility);
+      }
+    } catch (e) {
+      console.error("Failed to parse stored column visibility", e);
+    }
+    // Default visibility if nothing is stored or parsing fails
+    return allColumnDefinitions.reduce((acc, col) => ({ ...acc, [col.id]: col.defaultVisible }), {});
+  });
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const columnDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<keyof Task | 'taskWithDot' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  useEffect(() => {
+    localStorage.setItem('tableColumnVisibility', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (columnDropdownRef.current && !columnDropdownRef.current.contains(event.target as Node)) {
+        setShowColumnDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleColumnVisibility = (columnId: string) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnId]: !prev[columnId],
+    }));
+  };
+
+  const resetColumnVisibility = () => {
+    const defaultVisibility = allColumnDefinitions.reduce((acc, col) => ({ ...acc, [col.id]: col.defaultVisible }), {});
+    setVisibleColumns(defaultVisibility);
+  };
+
+  const visibleColumnDefinitions = useMemo(() => {
+    return allColumnDefinitions.filter(col => visibleColumns[col.id]);
+  }, [visibleColumns]);
+
 
   const fetchData = async (initialLoad = false) => {
     try {
@@ -256,6 +505,9 @@ const App = () => {
             status = 'Completed';
           }
 
+          // Progress calculation removed
+          // const progress = isDone ? 100 : 0;
+
           return {
             id: idStr || `T-${idx}`,
             task: taskStr || 'No Task Description',
@@ -264,7 +516,8 @@ const App = () => {
             systemType: systemStr || 'General',
             name: nameStr || 'Unassigned',
             status,
-            delayInHours: delay
+            delayInHours: delay,
+            // progress, // Progress assignment removed
           };
         });
 
@@ -298,6 +551,7 @@ const App = () => {
     setDateRange({ start: '', end: '' });
     setShowDelayedOnly(false);
     setShowNotDoneOnly(false);
+    setSearchQuery(''); // Reset search query
     setCurrentPage(1); // Reset pagination to first page when filters are cleared
   };
 
@@ -307,10 +561,25 @@ const App = () => {
            dateRange.start !== '' || 
            dateRange.end !== '' || 
            showDelayedOnly || 
-           showNotDoneOnly;
-  }, [selectedName, selectedSystem, dateRange, showDelayedOnly, showNotDoneOnly]);
+           showNotDoneOnly ||
+           searchQuery !== ''; // Added searchQuery to active filters check
+  }, [selectedName, selectedSystem, dateRange, showDelayedOnly, showNotDoneOnly, searchQuery]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedName !== 'All') count++;
+    if (selectedSystem !== 'All') count++;
+    if (dateRange.start !== '') count++;
+    if (dateRange.end !== '') count++;
+    if (showDelayedOnly) count++;
+    if (showNotDoneOnly) count++;
+    if (searchQuery !== '') count++;
+    return count;
+  }, [selectedName, selectedSystem, dateRange, showDelayedOnly, showNotDoneOnly, searchQuery]);
 
   const filteredData = useMemo(() => {
+    const { exactPhrases, keywords } = parseSearchQuery(searchQuery);
+
     return data.filter(item => {
       const matchesName = selectedName === 'All' || item.name === selectedName;
       const matchesSystem = selectedSystem === 'All' || item.systemType === selectedSystem;
@@ -325,15 +594,83 @@ const App = () => {
       }
       const matchesDelayed = !showDelayedOnly || item.status === 'Delayed';
       const matchesNotDone = !showNotDoneOnly || item.actual === null;
-      return matchesName && matchesSystem && matchesDate && matchesDelayed && matchesNotDone;
-    });
-  }, [data, selectedName, selectedSystem, dateRange, showDelayedOnly, showNotDoneOnly]);
+      
+      let matchesSearch = true;
+      if (exactPhrases.length > 0 || keywords.length > 0) {
+        const itemTaskLower = item.task.toLowerCase();
+        const itemIdLower = item.id.toLowerCase();
 
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+        const hasExactPhraseMatch = exactPhrases.some(phrase => itemTaskLower.includes(phrase) || itemIdLower.includes(phrase));
+        const hasKeywordMatch = keywords.some(keyword => itemTaskLower.includes(keyword) || itemIdLower.includes(keyword));
+
+        matchesSearch = hasExactPhraseMatch || hasKeywordMatch;
+      }
+
+      return matchesName && matchesSystem && matchesDate && matchesDelayed && matchesNotDone && matchesSearch;
+    });
+  }, [data, selectedName, selectedSystem, dateRange, showDelayedOnly, showNotDoneOnly, searchQuery]);
+
+  // Sorting logic
+  const handleSort = (columnId: keyof Task | 'taskWithDot') => {
+    if (sortColumn === columnId) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(columnId);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1); // Reset to first page on new sort
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortColumn) {
+      return filteredData;
+    }
+
+    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+    return [...filteredData].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      if (sortColumn === 'taskWithDot') {
+        aValue = a.task;
+        bValue = b.task;
+      } else {
+        aValue = a[sortColumn];
+        bValue = b[sortColumn];
+      }
+
+      // Handle null/Date types for planned/actual dates
+      if (sortColumn === 'planned' || sortColumn === 'actual') {
+        const dateA = aValue as Date | null;
+        const dateB = bValue as Date | null;
+
+        if (dateA === null && dateB === null) return 0;
+        if (dateA === null) return sortDirection === 'asc' ? 1 : -1; // nulls last
+        if (dateB === null) return sortDirection === 'asc' ? -1 : 1; // nulls last
+
+        const timeA = dateA.getTime();
+        const timeB = dateB.getTime();
+
+        return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+      }
+
+      // Handle numbers (no 'progress' anymore, but kept for other potential number fields)
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+
+      // Handle strings (case-insensitive, numeric-aware)
+      const comparison = collator.compare(String(aValue || ''), String(bValue || ''));
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredData, sortColumn, sortDirection]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
-    return filteredData.slice(start, start + rowsPerPage);
-  }, [filteredData, currentPage, rowsPerPage]);
+    return sortedData.slice(start, start + rowsPerPage);
+  }, [sortedData, currentPage, rowsPerPage]);
 
   const stats = useMemo(() => {
     const total = filteredData.length;
@@ -485,6 +822,28 @@ const App = () => {
             <input type="date" className="bg-transparent border-none text-xs font-bold outline-none cursor-pointer text-slate-700" value={dateRange.end} onChange={(e) => setDateRange(p => ({...p, end: e.target.value}))} aria-label="End Date"/>
           </div>
 
+          {/* NEW Search Input */}
+          <div className="flex items-center flex-grow bg-white/50 border border-slate-200 rounded-2xl px-4 py-2 shadow-sm max-w-sm"> {/* Added flex-grow and max-w-sm for better layout */}
+            <Search size={16} className="text-slate-400 mr-3" />
+            <input
+              type="text"
+              placeholder="Search tasks by ID or keyword..."
+              className="bg-transparent border-none outline-none text-sm font-bold text-slate-700 w-full"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search tasks by ID or keyword"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')} 
+                className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                aria-label="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
           {hasActiveFilters && (
             <button onClick={resetFilters} className="p-3 text-rose-500 bg-rose-50 rounded-2xl hover:bg-rose-100 transition-all border border-rose-100" title="Clear Filters" aria-label="Clear All Filters">
               <RotateCcw size={18} strokeWidth={3} />
@@ -538,10 +897,12 @@ const App = () => {
         <section className="glass-panel rounded-[3rem] overflow-hidden border animate-in stagger-3">
           <div className="p-8 border-b border-slate-100/60 flex items-center justify-between">
             <div className="flex items-center gap-4">
-               <h4 className="text-xl font-black text-slate-900 tracking-tight">Registry Stream</h4>
-               <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-indigo-100">
-                 {filteredData.length} entries
-               </span>
+               <h4 className="text-xl font-black text-slate-900 tracking-tight">ALL Data Table</h4> {/* Renamed table title */}
+               {activeFilterCount > 0 && (
+                 <span className="px-3 py-1 bg-rose-50 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-rose-100 animate-in stagger-1">
+                   {activeFilterCount} filters active
+                 </span>
+               )}
             </div>
             <div className="flex items-center gap-4">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stream Volume</span>
@@ -553,6 +914,48 @@ const App = () => {
               >
                 {[50, 100, 250, 500].map(v => <option key={v} value={v}>{v}</option>)}
               </select>
+
+              {/* Column Visibility Dropdown */}
+              <div className="relative" ref={columnDropdownRef}>
+                <button 
+                  onClick={() => setShowColumnDropdown(prev => !prev)} 
+                  className="flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-4 py-1.5 text-xs font-bold text-slate-700 outline-none cursor-pointer shadow-sm hover:bg-slate-50 transition-colors"
+                  aria-haspopup="true"
+                  aria-expanded={showColumnDropdown}
+                  aria-label="Toggle column visibility"
+                >
+                  <LayoutGrid size={14} className="text-slate-400" />
+                  Columns
+                  <ChevronDown size={12} className={`text-slate-400 transition-transform ${showColumnDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showColumnDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-20 animate-in fade-in slide-in-from-top-1">
+                    <ul className="py-2 text-sm text-slate-700">
+                      {allColumnDefinitions.map(col => (
+                        <li key={col.id} className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex items-center justify-between">
+                          <label className="flex items-center cursor-pointer flex-grow">
+                            <input
+                              type="checkbox"
+                              checked={!!visibleColumns[col.id]}
+                              onChange={() => toggleColumnVisibility(col.id)}
+                              className="form-checkbox h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            />
+                            <span className="ml-3 text-sm font-medium">{col.displayName}</span>
+                          </label>
+                        </li>
+                      ))}
+                      <li className="border-t border-slate-100 mt-2 pt-2">
+                        <button 
+                          onClick={resetColumnVisibility}
+                          className="w-full text-left px-4 py-2 text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                        >
+                          <RotateCcw size={14} /> Reset to Default
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -560,45 +963,52 @@ const App = () => {
             <table className="w-full text-left modern-table">
               <thead className="sticky top-0 bg-white/90 backdrop-blur-md z-10 border-b border-slate-100">
                 <tr>
-                  <th className="px-10">Task ID</th>
-                  <th>Task</th>
-                  <th>Doer</th>
-                  <th>Planned</th>
-                  <th>Actual</th>
-                  <th className="px-10">Status</th>
+                  {visibleColumnDefinitions.map(col => (
+                    <th
+                      key={col.id}
+                      className={`cursor-pointer group ${col.id === 'id' || col.id === 'status' ? 'px-10' : 'px-8'}`}
+                      style={{ minWidth: col.minWidth }}
+                      onClick={() => handleSort(col.id)}
+                      aria-sort={sortColumn === col.id ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-1">
+                        {col.displayName}
+                        {sortColumn === col.id && (
+                          sortDirection === 'asc' ? (
+                            <ChevronUp size={14} className="text-slate-500 transition-transform group-hover:text-slate-700" />
+                          ) : (
+                            <ChevronDown size={14} className="text-slate-500 transition-transform group-hover:text-slate-700" />
+                          )
+                        )}
+                        {sortColumn !== col.id && (
+                          <ChevronDown size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/30">
                 {paginatedData.length > 0 ? (
                   paginatedData.map((task, idx) => (
-                    <tr key={task.id + idx}>
-                      <td className="px-10 py-6">
-                        <span className="text-[10px] font-black text-slate-400 font-mono tracking-wider bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
-                          {task.id}
-                        </span>
-                      </td>
-                      <td className="py-6">
-                        <p className="text-sm font-bold text-slate-800 line-clamp-1">{task.task}</p>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">{task.systemType}</p>
-                      </td>
-                      <td className="py-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-white border border-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-[10px]" aria-hidden="true">
-                            {task.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <span className="text-sm font-semibold text-slate-700">{task.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-6 text-[12px] font-bold text-slate-500 tabular-nums">{formatDate(task.planned)}</td>
-                      <td className="py-6 text-[12px] font-bold text-slate-500 tabular-nums">{formatDate(task.actual)}</td>
-                      <td className="px-10 py-6">
-                        <StatusBadge status={task.status} />
-                      </td>
+                    <tr 
+                      key={task.id + idx} 
+                      className={`${task.status === 'Delayed' ? 'table-row-delayed' : ''} cursor-pointer`}
+                      onClick={() => setSelectedTask(task)} // Open modal on row click
+                      tabIndex={0} // Make row focusable
+                      role="button" // Indicate it's an interactive element
+                      aria-label={`View details for task ${task.id}`}
+                    >
+                      {visibleColumnDefinitions.map(col => (
+                        <td key={col.id} className={`${col.id === 'id' || col.id === 'status' ? 'px-10' : 'px-8'} py-6`}>
+                          {col.render(task)}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-40 text-center">
+                    <td colSpan={visibleColumnDefinitions.length} className="py-40 text-center">
                       <div className="flex flex-col items-center justify-center opacity-40">
                         <Search size={64} className="mb-6 text-slate-300" strokeWidth={1} aria-hidden="true" />
                         <h5 className="text-xl font-black text-slate-400 uppercase tracking-[0.2em]">Zero Nodes Located</h5>
@@ -614,8 +1024,8 @@ const App = () => {
           <div className="p-8 bg-slate-50/40 flex items-center justify-between border-t border-slate-100">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">
               Showing <span className="text-slate-900">{((currentPage - 1) * rowsPerPage + 1).toLocaleString()}</span> - 
-              <span className="text-slate-900">{Math.min(currentPage * rowsPerPage, filteredData.length).toLocaleString()}</span> of 
-              <span className="text-slate-900"> {filteredData.length.toLocaleString()}</span> entries
+              <span className="text-slate-900">{Math.min(currentPage * rowsPerPage, sortedData.length).toLocaleString()}</span> of 
+              <span className="text-slate-900"> {sortedData.length.toLocaleString()}</span> entries
             </div>
             
             <div className="flex items-center gap-4">
@@ -632,7 +1042,10 @@ const App = () => {
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let pageNum = i + 1;
                   if (totalPages > 5 && currentPage > 3) pageNum = currentPage - 2 + i;
+                  if (pageNum > totalPages) pageNum = totalPages - 4 + i; // Ensure page numbers stay within bounds near the end
+                  if (pageNum < 1) return null; // Ensure page numbers don't go below 1
                   if (pageNum > totalPages) return null;
+                  
                   return (
                     <button 
                       key={pageNum}
@@ -672,6 +1085,8 @@ const App = () => {
               </span>
            </div>
         </footer>
+
+        {selectedTask && <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
       </div>
     </div>
   );
