@@ -873,7 +873,7 @@ const App = () => {
             isFilterable={true}
           />
           <KPICard 
-            title="Remaining" 
+            title="On Going" 
             value={stats.notDone.toLocaleString()} 
             icon={Timer} 
             color="rose" 
