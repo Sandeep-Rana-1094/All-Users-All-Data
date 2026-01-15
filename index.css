@@ -1,4 +1,4 @@
-
+/* 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -178,4 +178,4 @@ body {
 
 .btn-refresh {
   @apply flex items-center justify-center bg-[#f3f4ff] rounded-2xl p-3 text-[#6366f1] hover:bg-[#ebeeff] transition-all shadow-sm active:scale-95;
-}
+} */
