@@ -310,8 +310,8 @@ const allColumnDefinitions: ColumnDefinition[] = [
     render: (task) => (
       <div className="flex items-center gap-2">
         <span 
-          className={`w-2 h-2 rounded-full ${task.actual !== null ? 'bg-emerald-500' : 'bg-slate-300'}`}
-          title={task.actual !== null ? "Task Completed" : "Task Not Yet Completed"}
+          className={`w-2 h-2 rounded-full ${task.actual !== null ? (task.status === 'Delayed' ? 'bg-amber-500' : 'bg-emerald-500') : 'bg-slate-300'}`}
+          title={task.actual !== null ? (task.status === 'Delayed' ? "Task Delayed" : "Task Completed") : "Task Not Yet Completed"}
           aria-hidden="true"
         ></span>
         <p className="text-sm font-bold text-slate-800 line-clamp-1">{task.task}</p>
@@ -454,7 +454,6 @@ const App = () => {
       const rawData = parseCSV(csvText);
 
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const mappedData: Task[] = rawData
         .filter(row => {
@@ -493,20 +492,17 @@ const App = () => {
           const isPlannedValid = plannedDate !== null;
 
           if (isPlannedValid) {
-            const pDayStart = new Date(plannedDate!.getFullYear(), plannedDate!.getMonth(), plannedDate!.getDate());
             if (isDone) {
-              const aDayStart = new Date(actualDate!.getFullYear(), actualDate!.getMonth(), actualDate!.getDate());
-              status = aDayStart <= pDayStart ? 'Completed' : 'Delayed';
+              // Strict timestamp comparison: If actual time is strictly after planned time, it's Delayed.
+              status = actualDate!.getTime() <= plannedDate!.getTime() ? 'Completed' : 'Delayed';
               delay = Math.max(0, (actualDate!.getTime() - plannedDate!.getTime()) / (1000 * 60 * 60));
             } else {
-              status = pDayStart < todayStart ? 'Delayed' : 'Pending';
+              // If not done, check if current time has passed the planned time
+              status = plannedDate! < now ? 'Delayed' : 'Pending';
             }
           } else if (isDone) {
             status = 'Completed';
           }
-
-          // Progress calculation removed
-          // const progress = isDone ? 100 : 0;
 
           return {
             id: idStr || `T-${idx}`,
@@ -517,7 +513,6 @@ const App = () => {
             name: nameStr || 'Unassigned',
             status,
             delayInHours: delay,
-            // progress, // Progress assignment removed
           };
         });
 
@@ -873,7 +868,7 @@ const App = () => {
             isFilterable={true}
           />
           <KPICard 
-            title="On Going" 
+            title="Remaining" 
             value={stats.notDone.toLocaleString()} 
             icon={Timer} 
             color="rose" 
